@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>我的記帳本</title>
+  <style>
+    /* 深色模式（預設）：所有顏色集中在這裡，改這裡就能換整頁配色 */
+    :root {
+      --bg:        rgb(30, 30, 34);
+      --card:      rgb(40, 42, 48);
+      --text:      rgb(125, 135, 160);
+      --border:    rgb(60, 64, 74);
+      --button:    rgb(50, 66, 100);
+      --button-text: rgb(160, 172, 200);
+    }
+    /* 淺色模式：一樣是低對比，只是整體亮起來 */
+    body.light {
+      --bg:        rgb(222, 225, 232);
+      --card:      rgb(232, 235, 241);
+      --text:      rgb(95, 105, 130);
+      --border:    rgb(200, 205, 215);
+      --button:    rgb(185, 198, 225);
+      --button-text: rgb(70, 82, 110);
+    }
+
+    body {
+      margin: 0;
+      padding: 32px 0;
+      font-family: system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      transition: background 0.2s, color 0.2s;
+    }
+    .container {
+      width: calc(100% - 64px);   /* 跟著視窗變寬，左右各留 32px */
+      min-width: 800px;           /* 但不小於 800px */
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 24px 20px;
+      margin-bottom: 20px;
+    }
+    input, select, button {
+      font-size: 15px;
+      padding: 10px;
+      border-radius: 8px;
+      font-family: inherit;
+    }
+    input, select {
+      display: block;             /* 每個欄位自己一行 */
+      width: 100%;
+      box-sizing: border-box;
+      margin-bottom: 12px;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    button {
+      background: var(--button);
+      color: var(--button-text);
+      border: none;
+      cursor: pointer;
+      padding: 10px 32px;
+    }
+    .center { text-align: center; }   /* 讓按鈕置中 */
+    table { width: 100%; border-collapse: collapse; }
+    td, th { padding: 8px; border-bottom: 1px solid var(--border); text-align: left; }
+    #answer { margin-top: 12px; text-align: center; }
+
+    /* 日期那一排：輸入框吃掉剩下的寬度，四個按鈕排在右邊 */
+    .date-row {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+    .date-row input {
+        flex: 1;
+        margin-bottom: 0;
+    }
+    .date-row button {
+        padding: 10px 16px;
+        white-space: nowrap;
+    }
+
+    /* 日曆圖示：告訴瀏覽器現在是深色模式，它就會改用淺色的圖示 */
+    :root      { color-scheme: dark; }
+    body.light { color-scheme: light; }
+    input[type="date"]::-webkit-calendar-picker-indicator {
+        opacity: 0.7;      /* 稍微壓暗一點，跟整頁的低對比搭配 */
+        cursor: pointer;
+    }
+    </style>
+    <script>
+    try {
+        if (localStorage.getItem("theme") === "light") {
+        document.documentElement.classList.add("light");
+        }
+    } catch (e) {}
+    </script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>我的記帳本</h1>
+      <button id="theme-btn">淺色模式</button>
+    </header>
+
+    <div class="card">
+      <h2>新增支出</h2>
+      <form id="add-form">
+        <div class="date-row">
+            <input type="date" id="spent_on" required>
+            <button type="button" data-days="-1">前一天</button>
+            <button type="button" data-days="1">後一天</button>
+            <button type="button" data-months="-1">前一個月</button>
+            <button type="button" data-months="1">後一個月</button>
+        </div>
+        <select id="category">
+          <option value="food">food</option>
+          <option value="drinks">drinks</option>
+          <option value="transport">transport</option>
+          <option value="fun">fun</option>
+        </select>
+        <input type="number" id="amount" placeholder="金額" required>
+        <input type="text" id="note" placeholder="備註">
+        <div class="center"><button type="submit">新增</button></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>問問 AI</h2>
+      <input type="text" id="question" placeholder="例如：我這個月吃飯花了多少？">
+      <div class="center"><button id="ask-btn">發問</button></div>
+      <div id="answer"></div>
+    </div>
+
+    <div class="card">
+      <h2>支出紀錄</h2>
+      <table>
+        <thead><tr><th>日期</th><th>類別</th><th>金額</th><th>備註</th></tr></thead>
+        <tbody id="list"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    // ---------- 深色／淺色切換 ----------
+    const themeBtn = document.getElementById("theme-btn");
+    function applyTheme(theme) {
+      document.body.classList.toggle("light", theme === "light");
+      themeBtn.textContent = theme === "light" ? "深色模式" : "淺色模式";
+    }
+    let theme = "dark";
+    try { theme = localStorage.getItem("theme") || "dark"; } catch (e) {}
+    applyTheme(theme);
+    themeBtn.addEventListener("click", () => {
+      theme = theme === "light" ? "dark" : "light";
+      applyTheme(theme);
+      try { localStorage.setItem("theme", theme); } catch (e) {}
+    });
+
+    // ---------- 日期預設為今天（用電腦的當地時間） ----------
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const dateInput = document.getElementById("spent_on");
+    dateInput.value = today;
+    dateInput.defaultValue = today;   // 表單 reset 後也會回到今天
+    // ---------- 快速調整日期 ----------
+    const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    function shiftDate(days, months) {
+        const [y, m, d] = (dateInput.value || today).split("-").map(Number);
+        let date;
+        if (months) {
+            // 換月時，如果目標月份沒有這一天（例如 1/31 的下個月），就停在那個月的最後一天
+            const lastDay = new Date(y, m - 1 + months + 1, 0).getDate();
+            date = new Date(y, m - 1 + months, Math.min(d, lastDay));
+        } else {
+            date = new Date(y, m - 1, d + days);   // 跨月、跨年會自動處理
+        }
+        dateInput.value = fmt(date);
+    }
+
+    document.querySelectorAll(".date-row button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            shiftDate(Number(btn.dataset.days || 0), Number(btn.dataset.months || 0));
+        });
+    });
+
+    // ---------- 讀取支出紀錄 ----------
+    async function loadExpenses() {
+      const res = await fetch("/expenses");
+      const data = await res.json();
+      const list = document.getElementById("list");
+      list.innerHTML = "";
+      for (const e of data) {
+        const row = document.createElement("tr");
+        for (const value of [e.spent_on, e.category, e.amount, e.note]) {
+          const cell = document.createElement("td");
+          cell.textContent = value;
+          row.appendChild(cell);
+        }
+        list.appendChild(row);
+      }
+    }
+
+    // ---------- 新增支出 ----------
+    document.getElementById("add-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await fetch("/expenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          spent_on: dateInput.value,
+          category: document.getElementById("category").value,
+          amount: Number(document.getElementById("amount").value),
+          note: document.getElementById("note").value,
+        }),
+      });
+      event.target.reset();
+      loadExpenses();
+    });
+
+    // ---------- 問 AI ----------
+    document.getElementById("ask-btn").addEventListener("click", async () => {
+      const answer = document.getElementById("answer");
+      answer.textContent = "思考中…";
+      const res = await fetch("/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: document.getElementById("question").value }),
+      });
+      const data = await res.json();
+      answer.textContent = res.ok ? data.answer : "錯誤：" + data.detail;
+    });
+
+    loadExpenses();
+  </script>
+</body>
+</html>

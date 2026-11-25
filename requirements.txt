@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+mssql-python
+python-dotenv
+openai
